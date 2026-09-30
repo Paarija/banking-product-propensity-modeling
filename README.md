@@ -1,62 +1,86 @@
-# Banking Product Recommendation from Monthly Histories
+# Banking Product Recommendation from Transaction Sequences
 
-An experimental, time-aware recommender for the [Kaggle Santander Product
-Recommendation competition](https://www.kaggle.com/competitions/santander-product-recommendation/data).
-It asks whether a small BERT-style transformer over a customer's monthly product
-ownership history can rank **newly added** products better than a tabular
-gradient-boosting baseline. This is a portfolio experiment, not a deployed banking
-system or evidence that a recommendation causes a purchase.
+An experimental model that ranks four bank products for a client using past anonymized
+transactions. The central question is whether a transaction-sequence transformer improves
+next-month product ranking over a simple tabular model. **This is a research/portfolio
+experiment, not a bank decisioning system or evidence of causal offer uplift.**
 
-**Status:** the code and synthetic-fixture tests are complete. No real-data benchmark
-is reported yet because Kaggle requires a signed-in user to accept the competition
-rules before the files can be downloaded. Do not quote any performance number for
-this project until that experiment has been run.
+**Status:** implementation, tests, and a small real-data experiment are complete.
+See [the results and limitations](docs/results.md) before quoting any metric.
 
-## Dataset and method
+## What the project does
 
-The Kaggle data contains monthly customer records and 24 product-ownership flags.
-These are **not individual transactions**. For a customer observed in consecutive
-months, a product is labeled positive if it was absent in the current month and
-present in the next month. We use only information through the current month as
-input. Monthly owned-product tokens, with their age in months, feed a small
-Hugging Face `BertModel` encoder. Its weights are initialized randomly and trained
-on this data; this does **not** use a pretrained language model or RAG. A
-scikit-learn `HistGradientBoostingClassifier` baseline uses current ownership and
-simple history counts.
-
-The latest available target month is held out for test, the preceding target
-month for validation, and earlier months for training. Customers can occur in
-multiple periods; this is a **temporal** test, not a client-disjoint test. Product
-scores are masked at ranking time for products already owned. The report includes
-per-product prevalence, average precision and ROC-AUC, buyer-only hit@1 and
-recall@2, and MAP@7 across all customers (zero for customers with no additions).
+1. Loads [MBD-mini](https://huggingface.co/datasets/ai-lab/MBD-mini), a 10%-client subset of
+   the [Multimodal Banking Dataset](https://arxiv.org/abs/2409.17587) of real anonymized
+   banking activity.
+2. For each client and reporting month, takes only transactions on or before the reporting
+   date; the four labels describe product uptake in the following month.
+3. Compares a scikit-learn gradient-boosting baseline on transaction summaries with a small
+   Hugging Face `BertModel` encoder of transaction type, signed log amount, and event recency.
+   **The BERT architecture is initialized randomly and trained from scratch. It is not an
+   English-language pretrained model.**
+4. Reports per-product prevalence, average precision, ROC-AUC, and product-ranking metrics
+   on client-disjoint folds. The measured comparison is in [Results](docs/results.md).
 
 ## Reproduce
 
-1. Sign into Kaggle and accept the competition rules at the
-   [data page](https://www.kaggle.com/competitions/santander-product-recommendation/data).
-   Download and extract `train_ver2.csv` (or `train.csv`) into `data/raw/`. The
-   competition's test file does not have outcome labels and is not used here.
-   Do not redistribute the data; it remains excluded from Git.
-2. Install Python 3.10+ dependencies and run the experiment:
+Python 3.10+ is required. A GPU helps but is not required for a small sample.
 
 ```bash
 python -m venv .venv
 python -m pip install -e ".[dev]"
+```
+
+Download `client_split.tar.gz`, `targets.tar.gz`, and `detail.tar.gz` from the
+[MBD-mini dataset files](https://huggingface.co/datasets/ai-lab/MBD-mini/tree/main)
+with the resumable downloader. It verifies each archive's SHA-256 digest and extracts
+only the files this project uses. The `detail.tar.gz` archive is roughly 2 GB:
+
+```bash
+bankrec-download --data-dir data/raw --workers 8
+```
+
+The resulting directories are:
+
+```text
+data/raw/client_split/
+data/raw/targets/
+data/raw/detail/trx/
+```
+
+The project only extracts the transaction portion of `detail`; dialogue and geolocation
+are not used. Data and model artifacts are excluded from Git. MBD-mini is public and
+listed as CC BY 4.0, but anonymization is not a guarantee of zero privacy risk; do
+not republish raw records or use them for individual decision-making.
+
+```bash
 bankrec --data-dir data/raw --max-clients 1000 --max-events 32 --epochs 2
 python -m pytest -q
 ```
 
-`bankrec` samples customer IDs with seed 42, then reads those customers' complete
-monthly records in CSV chunks. Results and weights are written under `artifacts/`
-and excluded from Git. A 1,000-customer run is only a pipeline check; rare product
-uptake can make its per-product scores unstable. Increase sample size for a
-credible comparison. No Kaggle credentials are stored in this repository.
+Metrics are written to `artifacts/metrics.json`. Increase `--max-clients` only after a small
+run succeeds. Client sampling is random with a fixed seed and does not inspect outcomes.
+The report records the sample size and prevalence, because rare purchases make small-sample
+scores unstable.
 
-## Limitations
+## Evaluation and limitations
 
-Santander states that the competition sample does not contain real Santander Spain
-customers and is not representative of that customer base. Product-uptake
-prediction is not causal uplift. The model needs external validation, calibration,
-fairness review and business-policy checks before any practical use. The data is
-from a 2016 competition, so its patterns may not reflect current banking behavior.
+- Folds 0–2 train, fold 3 validates, and fold 4 tests. A client cannot cross these splits;
+  multiple monthly rows from one client stay together. This measures generalization to new
+  clients, **not** a strictly later calendar period.
+- The published targets are extremely imbalanced. ROC-AUC alone is inadequate; inspect
+  per-product average precision and prevalence. Ranking metrics are calculated among
+  clients who actually purchased at least one of the four products.
+- This pipeline uses transaction activity only. Product labels are anonymized, so it does
+  not invent their real names or imply a specific offer strategy.
+- Historical purchase prediction is not treatment-effect estimation. It does not show
+  whether recommending a product would cause uptake, and it is not suitable for deployment
+  without privacy, fairness, calibration, and business-policy review.
+- MBD-mini's reduced client and time coverage is useful for development, but findings need
+  confirmation on the full benchmark before broad claims.
+
+## Source and credit
+
+Mollaev et al., *Multimodal Banking Dataset: Understanding Client Needs through Event
+Sequences*, KDD 2025. The [dataset card](https://huggingface.co/datasets/ai-lab/MBD-mini)
+lists a CC BY 4.0 license. This repository contains code, not redistributed bank records.

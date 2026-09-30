@@ -1,4 +1,4 @@
-"""Compare a tabular baseline and product-history transformer by time."""
+"""Train a simple tabular baseline and transaction transformer on the same folds."""
 
 from __future__ import annotations
 
@@ -14,12 +14,12 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from .data import PreparedData
 from .evaluation import evaluate
-from .model import ProductHistoryTransformer
+from .model import TransactionBert
 
 
 def _predict_baseline(features, labels, train_mask, eval_mask):
-    predictions = np.empty((int(eval_mask.sum()), labels.shape[1]), dtype=np.float32)
-    for i in range(labels.shape[1]):
+    predictions = np.empty((int(eval_mask.sum()), 4), dtype=np.float32)
+    for i in range(4):
         outcome = labels[train_mask, i].astype(int)
         if len(np.unique(outcome)) < 2:
             predictions[:, i] = float(outcome.mean())
@@ -48,22 +48,17 @@ def run_experiment(
     val_mask = data.folds == 3
     test_mask = data.folds == 4
     if not train_mask.any() or not val_mask.any() or not test_mask.any():
-        raise ValueError(
-            "need earlier months for training and distinct later validation/test months"
-        )
-    train_months = np.asarray(data.months)[train_mask]
-    val_months = np.asarray(data.months)[val_mask]
-    test_months = np.asarray(data.months)[test_mask]
-    if not (max(train_months) < min(val_months) < min(test_months)):
-        raise ValueError("time split must be strictly ordered")
+        raise ValueError("need MBD folds 0-2 for training, 3 for validation, and 4 for test")
+    if len(
+        set(np.asarray(data.client_ids)[train_mask]) & set(np.asarray(data.client_ids)[test_mask])
+    ):
+        raise ValueError("client leakage between train and test")
 
     baseline_val = _predict_baseline(data.baseline_features, data.labels, train_mask, val_mask)
     baseline_test = _predict_baseline(data.baseline_features, data.labels, train_mask, test_mask)
-    # Both models train only on earlier months; test is never used for tuning.
+    # The baseline is intentionally trained on folds 0-2 only; test is never used for tuning.
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = ProductHistoryTransformer(
-        data.vocab_size, data.event_types.shape[1], len(data.product_names)
-    ).to(device)
+    model = TransactionBert(data.vocab_size, data.event_types.shape[1]).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
     labels_train = data.labels[train_mask]
     positive = labels_train.sum(axis=0)
@@ -116,40 +111,17 @@ def run_experiment(
     transformer_val = predict(val_loader)
     transformer_test = predict(test_loader)
     report = {
-        "dataset": "Kaggle Santander Product Recommendation",
-        "split": "temporal: earlier target months train, penultimate validation, last test",
-        "train_through": max(train_months),
-        "validation_month": min(val_months),
-        "test_month": min(test_months),
+        "dataset": "ai-lab/MBD-mini",
+        "split": "client-disjoint: folds 0-2 train, 3 validation, 4 test",
         "sampled_clients": len(set(data.client_ids)),
         "history": history,
         "baseline": {
-            "validation": evaluate(
-                data.labels[val_mask],
-                baseline_val,
-                data.product_names,
-                data.owned_products[val_mask],
-            ),
-            "test": evaluate(
-                data.labels[test_mask],
-                baseline_test,
-                data.product_names,
-                data.owned_products[test_mask],
-            ),
+            "validation": evaluate(data.labels[val_mask], baseline_val),
+            "test": evaluate(data.labels[test_mask], baseline_test),
         },
         "transformer": {
-            "validation": evaluate(
-                data.labels[val_mask],
-                transformer_val,
-                data.product_names,
-                data.owned_products[val_mask],
-            ),
-            "test": evaluate(
-                data.labels[test_mask],
-                transformer_test,
-                data.product_names,
-                data.owned_products[test_mask],
-            ),
+            "validation": evaluate(data.labels[val_mask], transformer_val),
+            "test": evaluate(data.labels[test_mask], transformer_test),
         },
     }
     output = Path(output_dir)
@@ -160,7 +132,6 @@ def run_experiment(
             "state_dict": model.state_dict(),
             "vocab_size": data.vocab_size,
             "sequence_length": data.event_types.shape[1],
-            "product_names": data.product_names,
         },
         output / "transformer.pt",
     )

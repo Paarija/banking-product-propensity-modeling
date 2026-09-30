@@ -1,21 +1,26 @@
 import pandas as pd
 import pytest
 
-from bankrec.data import PRODUCT_COLUMNS
-
 
 @pytest.fixture
-def tiny_santander():
-    rows = []
-    for client in range(8):
-        for month in range(1, 6):
-            row = {"ncodpers": str(client), "fecha_dato": f"2015-{month:02d}-28"}
-            row.update(dict.fromkeys(PRODUCT_COLUMNS, 0))
-            if month >= 2 and client % 2 == 0:
-                row[PRODUCT_COLUMNS[0]] = 1
-            if month >= 4 and client % 2 == 1:
-                row[PRODUCT_COLUMNS[1]] = 1
-            if month >= 5 and client % 3 == 0:
-                row[PRODUCT_COLUMNS[2]] = 1
-            rows.append(row)
-    return pd.DataFrame(rows)
+def tiny_mbd():
+    clients = [f"client-{i}" for i in range(10)]
+    splits = pd.DataFrame({"client_id": clients, "fold": [0, 1, 2, 3, 4] * 2})
+    targets = pd.DataFrame(
+        {
+            "client_id": clients,
+            "mon": ["2022-02-28"] * 10,
+            "target_1": [0, 1] * 5,
+            "target_2": [1, 0] * 5,
+            "target_3": [0, 0, 1, 0, 0] * 2,
+            "target_4": [0, 1, 0, 0, 0] * 2,
+        }
+    )
+    transactions = pd.DataFrame(
+        [
+            {"client_id": cid, "event_time": when, "event_type": i % 3, "amount": i + 1}
+            for i, cid in enumerate(clients)
+            for when in ("2022-02-10", "2022-02-28", "2022-03-01")
+        ]
+    )
+    return transactions, targets, splits

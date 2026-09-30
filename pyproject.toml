@@ -5,15 +5,18 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "banking-product-recommender"
 version = "0.1.0"
-description = "Time-aware bank product ranking from monthly customer histories"
+description = "Leakage-aware banking product ranking from transaction histories"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "numpy>=1.26",
     "pandas>=2.1",
+    "pyarrow>=14",
     "scikit-learn>=1.4",
     "torch>=2.2",
     "transformers>=4.40,<5",
+    "requests>=2.31",
+    "truststore>=0.9",
 ]
 
 [project.optional-dependencies]
@@ -21,6 +24,7 @@ dev = ["pytest>=8", "ruff>=0.6"]
 
 [project.scripts]
 bankrec = "bankrec.cli:main"
+bankrec-download = "bankrec.download:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
