@@ -1,5 +1,8 @@
 # Banking Product Propensity Modeling
 
+**Core tech:** Python · PyTorch · Hugging Face Transformers · scikit-learn ·
+Pandas · NumPy · PyArrow
+
 An experimental model that ranks four bank products for a client using past anonymized
 transactions. The central question is whether a transaction-sequence transformer improves
 next-month product ranking over a simple tabular model. **This is a research/portfolio
@@ -24,15 +27,15 @@ See [the results and limitations](docs/results.md) before quoting any metric.
 
 ## Tech stack
 
-- **Language and data:** Python, Pandas, NumPy, and PyArrow for loading Parquet
+- **Language and data:** **Python**, **Pandas**, **NumPy**, and **PyArrow** for loading Parquet
   files and building time-aware transaction histories.
-- **Modeling:** PyTorch and Hugging Face Transformers for a BERT-style transaction
-  encoder trained from scratch; scikit-learn histogram gradient boosting as the
+- **Modeling:** **PyTorch** and **Hugging Face Transformers** for a BERT-style transaction
+  encoder trained from scratch; **scikit-learn** histogram gradient boosting as the
   tabular baseline.
-- **Evaluation:** scikit-learn average precision and ROC-AUC, plus custom
+- **Evaluation:** **scikit-learn** average precision and ROC-AUC, plus custom
   product-ranking metrics on client-disjoint folds.
-- **Reproducibility:** Requests and Truststore for verified dataset downloads,
-  Pytest for tests, and Ruff for linting and formatting.
+- **Reproducibility:** **Requests** and **Truststore** for verified dataset downloads,
+  **Pytest** for tests, and **Ruff** for linting and formatting.
 
 ## Reproduce
 
