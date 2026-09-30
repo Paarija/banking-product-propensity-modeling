@@ -22,6 +22,18 @@ See [the results and limitations](docs/results.md) before quoting any metric.
 4. Reports per-product prevalence, average precision, ROC-AUC, and product-ranking metrics
    on client-disjoint folds. The measured comparison is in [Results](docs/results.md).
 
+## Tech stack
+
+- **Language and data:** Python, Pandas, NumPy, and PyArrow for loading Parquet
+  files and building time-aware transaction histories.
+- **Modeling:** PyTorch and Hugging Face Transformers for a BERT-style transaction
+  encoder trained from scratch; scikit-learn histogram gradient boosting as the
+  tabular baseline.
+- **Evaluation:** scikit-learn average precision and ROC-AUC, plus custom
+  product-ranking metrics on client-disjoint folds.
+- **Reproducibility:** Requests and Truststore for verified dataset downloads,
+  Pytest for tests, and Ruff for linting and formatting.
+
 ## Reproduce
 
 Python 3.10+ is required. A GPU helps but is not required for a small sample.
