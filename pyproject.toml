@@ -21,6 +21,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6"]
+dashboard = ["streamlit>=1.50"]
 
 [project.scripts]
 bankrec = "bankrec.cli:main"

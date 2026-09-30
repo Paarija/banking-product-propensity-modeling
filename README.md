@@ -1,7 +1,7 @@
 # Banking Product Propensity Modeling
 
 **Core tech:** Python · PyTorch · Hugging Face Transformers · scikit-learn ·
-Pandas · NumPy · PyArrow
+Pandas · NumPy · PyArrow · Streamlit
 
 An experimental model that ranks four bank products for a client using past anonymized
 transactions. The central question is whether a transaction-sequence transformer improves
@@ -34,6 +34,7 @@ See [the results and limitations](docs/results.md) before quoting any metric.
   tabular baseline.
 - **Evaluation:** **scikit-learn** average precision and ROC-AUC, plus custom
   product-ranking metrics on client-disjoint folds.
+- **Dashboard:** **Streamlit** for local model comparison and held-out example exploration.
 - **Reproducibility:** **Requests** and **Truststore** for verified dataset downloads,
   **Pytest** for tests, and **Ruff** for linting and formatting.
 
@@ -77,6 +78,31 @@ Metrics are written to `artifacts/metrics.json`. Increase `--max-clients` only a
 run succeeds. Client sampling is random with a fixed seed and does not inspect outcomes.
 The report records the sample size and prevalence, because rare purchases make small-sample
 scores unstable.
+
+## Open the local dashboard
+
+The dashboard reads local experiment artifacts; it does not upload data or make
+predictions for a new customer. On Windows Command Prompt, run these from the
+project folder (which may still be named `banking-product-recommender` locally):
+
+```cmd
+.venv\Scripts\python.exe -m pip install -e ".[dashboard,dev]"
+.venv\Scripts\python.exe -m streamlit run src\bankrec\dashboard.py --server.address 127.0.0.1
+```
+
+Streamlit will print a local URL, usually `http://127.0.0.1:8501`. Open it in a
+browser. The included Streamlit configuration binds the app to this computer only
+and disables usage telemetry. The app can show metrics from older runs; to inspect
+individual held-out examples, run a fresh experiment with the current code so it creates
+`predictions.parquet` next to `metrics.json`:
+
+```cmd
+.venv\Scripts\python.exe -m bankrec.cli --data-dir data\raw --max-clients 1000 --max-events 32 --epochs 2 --output-dir artifacts\dashboard-run
+```
+
+The prediction file contains scores and labels for validation/test examples,
+but no raw transactions or client identifiers. Both it and the model weights
+remain in the Git-ignored `artifacts/` directory.
 
 ## Evaluation and limitations
 

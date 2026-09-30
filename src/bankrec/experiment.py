@@ -7,6 +7,7 @@ import random
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import torch
 from sklearn.ensemble import HistGradientBoostingClassifier
 from torch import nn
@@ -127,6 +128,28 @@ def run_experiment(
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
     (output / "metrics.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+    # Local dashboard artifact: no raw transactions or client identifiers.
+    prediction_rows = []
+    for split_name, split_mask, baseline_scores, transformer_scores in (
+        ("validation", val_mask, baseline_val, transformer_val),
+        ("test", test_mask, baseline_test, transformer_test),
+    ):
+        frame = pd.DataFrame(
+            {
+                "split": split_name,
+                "reporting_month": np.asarray(data.months)[split_mask],
+                "history_event_count": data.attention_mask[split_mask].sum(axis=1) - 1,
+            }
+        )
+        for i in range(data.labels.shape[1]):
+            product = f"product_{i + 1}"
+            frame[f"actual_{product}"] = data.labels[split_mask, i].astype(np.int8)
+            frame[f"baseline_{product}"] = baseline_scores[:, i]
+            frame[f"transformer_{product}"] = transformer_scores[:, i]
+        prediction_rows.append(frame)
+    predictions = pd.concat(prediction_rows, ignore_index=True)
+    predictions.insert(0, "example_id", np.arange(len(predictions)))
+    predictions.to_parquet(output / "predictions.parquet", index=False)
     torch.save(
         {
             "state_dict": model.state_dict(),
