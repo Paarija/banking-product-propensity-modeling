@@ -1,4 +1,4 @@
-"""Read only a sampled set of MBD-mini clients from partitioned Parquet files."""
+"""Read a client sample from the Kaggle Santander competition CSV in chunks."""
 
 from __future__ import annotations
 
@@ -6,35 +6,49 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import pyarrow.dataset as ds
+
+from .data import PRODUCT_COLUMNS
 
 
-def load_mbd_mini(root: str | Path, *, max_clients: int = 5000, seed: int = 42):
+def load_santander(root: str | Path, *, max_clients: int = 1000, seed: int = 42) -> pd.DataFrame:
     root = Path(root)
-    target_dir, split_dir, trx_dir = (
-        root / "targets",
-        root / "client_split",
-        root / "detail" / "trx",
-    )
-    missing = [str(path) for path in (target_dir, split_dir, trx_dir) if not path.is_dir()]
-    if missing:
-        raise FileNotFoundError("Extract MBD-mini archives first; missing: " + ", ".join(missing))
+    candidates = [
+        root / "train_ver2.csv",
+        root / "train.csv",
+        root / "train_ver2.csv.zip",
+        root / "train.csv.zip",
+    ]
+    path = next((candidate for candidate in candidates if candidate.is_file()), None)
+    if path is None:
+        raise FileNotFoundError(
+            "Download the Santander Product Recommendation competition data from Kaggle "
+            "after accepting its rules; put train_ver2.csv (or train.csv) in " + str(root)
+        )
     if max_clients < 1:
         raise ValueError("max_clients must be positive")
-
-    targets = pd.read_parquet(target_dir)
-    splits = pd.read_parquet(split_dir)
-    # Sample clients, never rows or positives, so all months stay together and prevalence is not engineered.
-    clients = np.sort(targets["client_id"].unique())
+    header = pd.read_csv(path, nrows=0).columns
+    required = {"ncodpers", "fecha_dato", *PRODUCT_COLUMNS}
+    missing = required - set(header)
+    if missing:
+        raise ValueError(f"Santander CSV missing columns: {', '.join(sorted(missing))}")
+    clients = set()
+    for chunk in pd.read_csv(path, usecols=["ncodpers"], dtype=str, chunksize=200_000):
+        clients.update(chunk["ncodpers"].dropna().tolist())
+    clients = np.array(sorted(clients))
     if len(clients) > max_clients:
-        clients = np.random.default_rng(seed).choice(clients, size=max_clients, replace=False)
+        clients = np.random.default_rng(seed).choice(clients, max_clients, replace=False)
     selected = set(clients)
-    targets = targets[targets["client_id"].isin(selected)].copy()
-    splits = splits[splits["client_id"].isin(selected)].copy()
-
-    dataset = ds.dataset(trx_dir, format="parquet", partitioning="hive")
-    table = dataset.to_table(
-        columns=["client_id", "event_time", "event_type", "amount"],
-        filter=ds.field("client_id").isin(list(selected)),
-    )
-    return table.to_pandas(), targets, splits
+    chunks = []
+    for chunk in pd.read_csv(
+        path,
+        usecols=["ncodpers", "fecha_dato", *PRODUCT_COLUMNS],
+        dtype=str,
+        chunksize=200_000,
+        low_memory=False,
+    ):
+        subset = chunk[chunk["ncodpers"].isin(selected)]
+        if not subset.empty:
+            chunks.append(subset)
+    if not chunks:
+        raise ValueError("no sampled customers found in Santander CSV")
+    return pd.concat(chunks, ignore_index=True)

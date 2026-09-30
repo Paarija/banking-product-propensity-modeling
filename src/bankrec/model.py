@@ -1,4 +1,4 @@
-"""Small BERT-style transaction encoder trained from scratch, not a language model."""
+"""Small BERT-style product-history encoder trained from scratch, not a language model."""
 
 from __future__ import annotations
 
@@ -7,8 +7,10 @@ from torch import nn
 from transformers import BertConfig, BertModel
 
 
-class TransactionBert(nn.Module):
-    def __init__(self, vocab_size: int, sequence_length: int, hidden_size: int = 64):
+class ProductHistoryTransformer(nn.Module):
+    def __init__(
+        self, vocab_size: int, sequence_length: int, num_products: int, hidden_size: int = 64
+    ):
         super().__init__()
         if hidden_size % 4:
             raise ValueError("hidden_size must be divisible by four attention heads")
@@ -25,7 +27,7 @@ class TransactionBert(nn.Module):
         self.type_embedding = nn.Embedding(vocab_size, hidden_size, padding_idx=0)
         self.numeric_projection = nn.Linear(2, hidden_size)
         self.encoder = BertModel(config, add_pooling_layer=False)
-        self.head = nn.Linear(hidden_size, 4)
+        self.head = nn.Linear(hidden_size, num_products)
 
     def forward(
         self, event_types: torch.Tensor, numeric: torch.Tensor, attention_mask: torch.Tensor

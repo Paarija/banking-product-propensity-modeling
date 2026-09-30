@@ -5,13 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "banking-product-recommender"
 version = "0.1.0"
-description = "Leakage-aware banking product ranking from transaction histories"
+description = "Time-aware bank product ranking from monthly customer histories"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "numpy>=1.26",
     "pandas>=2.1",
-    "pyarrow>=14",
     "scikit-learn>=1.4",
     "torch>=2.2",
     "transformers>=4.40,<5",
