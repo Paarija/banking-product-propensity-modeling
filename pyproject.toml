@@ -3,9 +3,9 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "banking-product-recommender"
+name = "banking-product-propensity-modeling"
 version = "0.1.0"
-description = "Leakage-aware banking product ranking from transaction histories"
+description = "Banking product propensity modeling from transaction histories"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

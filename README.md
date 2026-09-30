@@ -1,4 +1,4 @@
-# Banking Product Recommendation from Transaction Sequences
+# Banking Product Propensity Modeling
 
 An experimental model that ranks four bank products for a client using past anonymized
 transactions. The central question is whether a transaction-sequence transformer improves
