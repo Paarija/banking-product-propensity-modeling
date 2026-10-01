@@ -121,10 +121,18 @@ def prepare(
             {
                 "transaction_count": count,
                 "total_amount": float(amounts.sum()),
+                "total_absolute_amount": float(np.abs(amounts).sum()),
                 "mean_amount": float(amounts.mean()) if count else 0.0,
                 "std_amount": float(amounts.std()) if count else 0.0,
+                "credit_share": float((amounts > 0).mean()) if count else 0.0,
+                "recent_30d_count": int((days_ago <= 30).sum()) if count else 0,
+                "recent_90d_count": int((days_ago <= 90).sum()) if count else 0,
                 "days_since_last": float(days_ago[-1]) if count else 365.0,
                 "unique_event_types": int(history["event_type"].nunique()),
+                **{
+                    f"event_type_{category}_count": int((history["event_type"] == category).sum())
+                    for category in categories
+                },
             }
         )
 

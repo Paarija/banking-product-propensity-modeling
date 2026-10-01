@@ -1,47 +1,46 @@
-# MBD-mini experiment: fixed 5,000-client sample
+# MBD-mini future-month benchmark: 5,000 clients
 
-This is an exploratory, reproducible comparison—not a production result, causal
-offer-uplift estimate, or full-dataset benchmark. The data is the publicly
-available [MBD-mini](https://huggingface.co/datasets/ai-lab/MBD-mini). No raw bank
-records or model weights are committed to this repository.
+This is an exploratory portfolio benchmark, not a production result, causal offer-uplift estimate, or full-dataset study. It uses the public [MBD-mini](https://huggingface.co/datasets/ai-lab/MBD-mini) dataset. No raw records, prediction files, or model weights are committed.
 
-## Setup
+## Experimental setup
 
-- Sample 5,000 client IDs uniformly with NumPy seed 42; retain all available
-  client-month rows for each sampled client. Sampling does not use the labels.
-- Client-disjoint folds 0–2 train, 3 validation, 4 test. This tests new-client
-  generalization, **not** a future-calendar-month forecast.
-- Up to 32 prior transactions per client-month; BERT-style encoder initialized
-  randomly and trained for 2 epochs, batch size 64. It is not a pretrained
-  language model. Baseline: per-product histogram gradient boosting on six
-  transaction-history summary features.
-- Command: `bankrec --data-dir data/raw --max-clients 5000 --max-events 32 --epochs 2 --batch-size 64 --output-dir artifacts/benchmark-5000`
+- Uniformly sample 5,000 client IDs with NumPy seed 42 without inspecting outcomes.
+- Build each customer-month history using only transactions available by its reporting cutoff.
+- Use 62 tabular features covering activity, amount, recency, credit share, and transaction-type counts.
+- Train on reporting months through November 2022, validate on December 2022, and test on January 2023.
+- Compare Logistic Regression, Random Forest, and histogram Gradient Boosting with a BERT-style transaction encoder trained from scratch for two epochs.
+- Use at most 32 prior events per customer-month and a transformer batch size of 64.
 
-## Observed results
+Reproduction command:
 
-The test fold contains 12,420 client-month rows; 124 rows have at least one
-positive product label. Buyer-only metrics condition on these 124 rows, so they
-must not be interpreted as all-customer accuracy.
+```cmd
+bankrec --data-dir data\raw --max-clients 5000 --max-events 32 --epochs 2 --batch-size 64 --split-strategy time --output-dir artifacts\mbd-time-5000
+```
 
-| Metric | Tabular baseline | Transaction transformer |
-| --- | ---: | ---: |
-| Validation hit@1 among buyer-months (139 rows) | 39.6% | 46.8% |
-| Test hit@1 among buyer-months (124 rows) | 41.1% | 52.4% |
-| Test recall@2 among buyer-months | 75.4% | 77.0% |
+## Test results
 
-Average precision (AP) is shown alongside the test-fold positive prevalence;
-random ranking would have expected AP near that prevalence.
+The January 2023 test set contains 5,000 customer-month rows. Only 32 rows have at least one positive product label, so buyer-only ranking metrics and product-level scores are highly uncertain.
 
-| Anonymized product | Test prevalence | Baseline AP | Transformer AP |
+| Model | Macro AP | Hit@1 among 32 buyer-months | Recall@2 among buyer-months |
 | --- | ---: | ---: | ---: |
-| Product 1 | 0.523% | 0.0159 | 0.0160 |
-| Product 2 | 0.048% | 0.0024 | 0.0141 |
-| Product 3 | 0.258% | 0.0083 | 0.0087 |
-| Product 4 | 0.233% | 0.0043 | 0.0095 |
+| Logistic Regression | **0.0235** | 21.9% | 67.2% |
+| Random Forest | 0.0065 | **43.8%** | **75.0%** |
+| Gradient Boosting | 0.0040 | 28.1% | 68.8% |
+| Transaction Transformer | 0.0122 | 28.1% | 54.7% |
 
-The transformer beat this baseline on these metrics in **this one run**. Product
-2 has only six positive test rows, so its apparent AP gain is especially
-unstable. More seeds, a larger sample, uncertainty intervals, and calibration
-checks are needed before claiming a robust improvement. Both models use only
-transaction history; the labels are anonymized, so no specific banking product
-or marketing action is inferred.
+There is no single winner across every objective. Logistic Regression has the highest macro average precision, while Random Forest leads the buyer-only ranking metrics. The transformer exceeds both tree models on macro AP but does not beat Logistic Regression.
+
+Average precision should be read beside the extremely low base rate:
+
+| Product | Prevalence | Logistic AP | Random Forest AP | Gradient Boosting AP | Transformer AP |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Product 1 | 0.220% | 0.0039 | 0.0036 | 0.0037 | **0.0040** |
+| Product 2 | 0.060% | **0.0345** | 0.0056 | 0.0008 | 0.0122 |
+| Product 3 | 0.140% | 0.0039 | 0.0088 | 0.0036 | **0.0209** |
+| Product 4 | 0.240% | **0.0519** | 0.0077 | 0.0081 | 0.0116 |
+
+## Interpretation
+
+The result supports starting with traditional data science rather than assuming a deeper model will win. Logistic Regression captures useful signal from engineered behavior features and is easier to inspect. The transformer appears useful for Product 3, suggesting event order may matter for some outcomes, but the number of positives is too small for a robust claim.
+
+Before drawing broader conclusions, the experiment would need more clients, repeated seeds, confidence intervals, probability calibration, subgroup analysis, and a longer rolling-window backtest. Historical uptake prediction also does not prove that recommending a product would cause adoption.

@@ -12,15 +12,30 @@ def evaluate(y_true: np.ndarray, scores: np.ndarray) -> dict:
     if not np.isfinite(scores).all():
         raise ValueError("scores must be finite")
     per_product = {}
+    average_precisions = []
     for i in range(4):
         actual = y_true[:, i]
         distinct = np.unique(actual)
+        average_precision = (
+            float(average_precision_score(actual, scores[:, i])) if len(distinct) == 2 else None
+        )
+        if average_precision is not None:
+            average_precisions.append(average_precision)
+        prevalence = float(actual.mean()) if len(actual) else None
+        lift = {}
+        for fraction in (0.01, 0.05, 0.10):
+            count = max(1, int(np.ceil(len(actual) * fraction)))
+            top_rate = (
+                float(actual[np.argsort(-scores[:, i])[:count]].mean()) if len(actual) else None
+            )
+            lift[f"top_{int(fraction * 100)}pct"] = (
+                float(top_rate / prevalence) if prevalence and top_rate is not None else None
+            )
         per_product[f"product_{i + 1}"] = {
-            "prevalence": float(actual.mean()) if len(actual) else None,
-            "average_precision": float(average_precision_score(actual, scores[:, i]))
-            if len(distinct) == 2
-            else None,
+            "prevalence": prevalence,
+            "average_precision": average_precision,
             "roc_auc": float(roc_auc_score(actual, scores[:, i])) if len(distinct) == 2 else None,
+            "lift": lift,
         }
     eligible = y_true.sum(axis=1) > 0
     ranked = np.argsort(-scores[eligible], axis=1)
@@ -38,6 +53,9 @@ def evaluate(y_true: np.ndarray, scores: np.ndarray) -> dict:
     return {
         "examples": len(y_true),
         "positive_clients": int(eligible.sum()),
+        "macro_average_precision": float(np.mean(average_precisions))
+        if average_precisions
+        else None,
         "hit_at_1_among_buyers": hit_at_1,
         "recall_at_2_among_buyers": recall_at_2,
         "per_product": per_product,

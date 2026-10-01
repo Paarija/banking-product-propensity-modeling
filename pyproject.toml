@@ -22,10 +22,13 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6"]
 dashboard = ["streamlit>=1.50"]
+notebook = ["jupyter>=1.0", "matplotlib>=3.8"]
+visuals = ["matplotlib>=3.8"]
 
 [project.scripts]
 bankrec = "bankrec.cli:main"
 bankrec-download = "bankrec.download:main"
+bankrec-report = "bankrec.reporting:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

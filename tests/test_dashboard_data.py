@@ -2,7 +2,12 @@ import json
 
 import pandas as pd
 
-from bankrec.dashboard_data import available_runs, load_run, product_metrics
+from bankrec.dashboard_data import (
+    available_runs,
+    load_run,
+    precision_recall_data,
+    product_metrics,
+)
 
 
 def test_discovers_and_reads_local_runs(tmp_path):
@@ -27,7 +32,12 @@ def test_old_run_without_predictions_is_supported(tmp_path):
 
 
 def test_product_comparison_table():
-    product = {"prevalence": 0.01, "average_precision": 0.02, "roc_auc": 0.6}
+    product = {
+        "prevalence": 0.01,
+        "average_precision": 0.02,
+        "roc_auc": 0.6,
+        "lift": {"top_10pct": 2.0},
+    }
     report = {
         "baseline": {"test": {"per_product": {"product_1": product}}},
         "transformer": {
@@ -39,5 +49,20 @@ def test_product_comparison_table():
         },
     }
     table = product_metrics(report, "test")
-    assert table.iloc[0]["baseline_ap"] == 0.02
-    assert table.iloc[0]["transformer_ap"] == 0.03
+    assert table["model"].tolist() == ["Gradient Boosting", "Transaction Transformer"]
+    assert table["average_precision"].tolist() == [0.02, 0.03]
+    assert table.iloc[0]["top_10pct_lift"] == 2.0
+
+
+def test_precision_recall_data_uses_saved_scores():
+    predictions = pd.DataFrame(
+        {
+            "split": ["test"] * 4,
+            "actual_product_1": [0, 1, 0, 1],
+            "logistic_regression_product_1": [0.1, 0.8, 0.2, 0.7],
+        }
+    )
+    curve = precision_recall_data(predictions, "test", "product_1", ["logistic_regression"])
+    assert not curve.empty
+    assert curve["precision"].between(0, 1).all()
+    assert curve["recall"].between(0, 1).all()

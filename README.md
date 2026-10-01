@@ -1,127 +1,138 @@
 # Banking Product Propensity Modeling
 
-**Core tech:** Python · PyTorch · Hugging Face Transformers · scikit-learn ·
-Pandas · NumPy · PyArrow · Streamlit
+> Given a customer's transaction history, predict which anonymized banking product they may adopt next month.
 
-An experimental model that ranks four bank products for a client using past anonymized
-transactions. The central question is whether a transaction-sequence transformer improves
-next-month product ranking over a simple tabular model. **This is a research/portfolio
-experiment, not a bank decisioning system or evidence of causal offer uplift.**
+This end-to-end data-science project turns historical transactions into a ranked product list. It starts with interpretable tabular models, then tests whether a transformer that reads the transaction sequence adds measurable value.
 
-**Status:** implementation, tests, and a small real-data experiment are complete.
-See [the results and limitations](docs/results.md) before quoting any metric.
+**Python · Pandas · scikit-learn · PyTorch · Hugging Face Transformers · Streamlit · PyArrow · Matplotlib · Pytest**
 
-## What the project does
+The repository is designed to be understood and run without a large download: the quick start generates deterministic fictional customers locally. A separate workflow reproduces the experiment on public, anonymized MBD-mini data.
 
-1. Loads [MBD-mini](https://huggingface.co/datasets/ai-lab/MBD-mini), a 10%-client subset of
-   the [Multimodal Banking Dataset](https://arxiv.org/abs/2409.17587) of real anonymized
-   banking activity.
-2. For each client and reporting month, takes only transactions on or before the reporting
-   date; the four labels describe product uptake in the following month.
-3. Compares a scikit-learn gradient-boosting baseline on transaction summaries with a small
-   Hugging Face `BertModel` encoder of transaction type, signed log amount, and event recency.
-   **The BERT architecture is initialized randomly and trained from scratch. It is not an
-   English-language pretrained model.**
-4. Reports per-product prevalence, average precision, ROC-AUC, and product-ranking metrics
-   on client-disjoint folds. The measured comparison is in [Results](docs/results.md).
+## What is demonstrated
 
-## Tech stack
+- Leakage-aware transaction histories and behavioral feature engineering
+- Logistic Regression, Random Forest, and Gradient Boosting baselines
+- A BERT-style encoder for ordered transaction type, amount, and recency
+- Chronological backtesting for future-month performance
+- Client-disjoint evaluation for unseen-customer generalization
+- Rare-outcome evaluation with average precision, precision-recall curves, recall@k, and top-k lift
+- Global tabular feature importance and an interactive Streamlit dashboard
+- Tested command-line workflows, synthetic demo data, and reproducible artifacts
 
-- **Language and data:** **Python**, **Pandas**, **NumPy**, and **PyArrow** for loading Parquet
-  files and building time-aware transaction histories.
-- **Modeling:** **PyTorch** and **Hugging Face Transformers** for a BERT-style transaction
-  encoder trained from scratch; **scikit-learn** histogram gradient boosting as the
-  tabular baseline.
-- **Evaluation:** **scikit-learn** average precision and ROC-AUC, plus custom
-  product-ranking metrics on client-disjoint folds.
-- **Dashboard:** **Streamlit** for local model comparison and held-out example exploration.
-- **Reproducibility:** **Requests** and **Truststore** for verified dataset downloads,
-  **Pytest** for tests, and **Ruff** for linting and formatting.
+The transformer uses the Hugging Face `BertModel` architecture but is initialized from scratch for structured transaction sequences. It is **not** a pretrained English-language model, and it is presented as an experiment rather than assumed to be the best approach.
 
-## Reproduce
-
-Python 3.10+ is required. A GPU helps but is not required for a small sample.
-
-```bash
-python -m venv .venv
-python -m pip install -e ".[dev]"
-```
-
-Download `client_split.tar.gz`, `targets.tar.gz`, and `detail.tar.gz` from the
-[MBD-mini dataset files](https://huggingface.co/datasets/ai-lab/MBD-mini/tree/main)
-with the resumable downloader. It verifies each archive's SHA-256 digest and extracts
-only the files this project uses. The `detail.tar.gz` archive is roughly 2 GB:
-
-```bash
-bankrec-download --data-dir data/raw --workers 8
-```
-
-The resulting directories are:
+## Modeling workflow
 
 ```text
-data/raw/client_split/
-data/raw/targets/
-data/raw/detail/trx/
+Transactions up to reporting date
+              │
+              ├── Tabular behavior features ──> LR / Random Forest / Gradient Boosting
+              │
+              └── Ordered event sequence ─────> Transaction Transformer
+                                                   │
+                                                   v
+                                   Four next-month propensity scores
+                                                   │
+                                                   v
+                                  Ranked anonymized product shortlist
 ```
 
-The project only extracts the transaction portion of `detail`; dialogue and geolocation
-are not used. Data and model artifacts are excluded from Git. MBD-mini is public and
-listed as CC BY 4.0, but anonymization is not a guarantee of zero privacy risk; do
-not republish raw records or use them for individual decision-making.
+For each customer-month, the pipeline excludes transactions after the reporting cutoff. The default evaluation uses earlier months for training, the second-latest month for validation, and the latest month for testing. This mimics the direction in which a real model would be used.
 
-```bash
-bankrec --data-dir data/raw --max-clients 1000 --max-events 32 --epochs 2
-python -m pytest -q
-```
+## Fast local demo
 
-Metrics are written to `artifacts/metrics.json`. Increase `--max-clients` only after a small
-run succeeds. Client sampling is random with a fixed seed and does not inspect outcomes.
-The report records the sample size and prevalence, because rare purchases make small-sample
-scores unstable.
-
-## Open the local dashboard
-
-The dashboard reads local experiment artifacts; it does not upload data or make
-predictions for a new customer. On Windows Command Prompt, run these from the
-project folder (which may still be named `banking-product-recommender` locally):
+Python 3.10+ is required. From Windows Command Prompt:
 
 ```cmd
-.venv\Scripts\python.exe -m pip install -e ".[dashboard,dev]"
+py -3.12 -m venv .venv
+.venv\Scripts\python.exe -m pip install -e ".[dashboard,dev,visuals]"
+.venv\Scripts\python.exe -m bankrec.cli --demo --split-strategy time --epochs 1 --output-dir artifacts\demo
+.venv\Scripts\python.exe -m bankrec.reporting --run-dir artifacts\demo
 .venv\Scripts\python.exe -m streamlit run src\bankrec\dashboard.py --server.address 127.0.0.1
 ```
 
-Streamlit will print a local URL, usually `http://127.0.0.1:8501`. Open it in a
-browser. The included Streamlit configuration binds the app to this computer only
-and disables usage telemetry. The app can show metrics from older runs; to inspect
-individual held-out examples, run a fresh experiment with the current code so it creates
-`predictions.parquet` next to `metrics.json`:
+Open the local URL printed by Streamlit, usually `http://127.0.0.1:8501`. The demo contains no real customer records and needs no network download.
+
+The dashboard provides:
+
+- Outcome prevalence and transaction-history coverage
+- Side-by-side model metrics
+- Product-level average precision and top-decile lift
+- Precision-recall curves
+- Global tabular feature importance
+- Held-out customer-month examples with ranked propensity scores
+- Clear validation and deployment limitations
+
+## End-to-end notebook
+
+[`notebooks/01_end_to_end_demo.ipynb`](notebooks/01_end_to_end_demo.ipynb) explains data loading, exploratory analysis, imbalance, feature engineering, chronological validation, baseline models, the transformer experiment, evaluation, visual results, and business interpretation.
+
+To run it:
 
 ```cmd
-.venv\Scripts\python.exe -m bankrec.cli --data-dir data\raw --max-clients 1000 --max-events 32 --epochs 2 --output-dir artifacts\dashboard-run
+.venv\Scripts\python.exe -m pip install -e ".[notebook]"
+.venv\Scripts\python.exe -m jupyter lab notebooks\01_end_to_end_demo.ipynb
 ```
 
-The prediction file contains scores and labels for validation/test examples,
-but no raw transactions or client identifiers. Both it and the model weights
-remain in the Git-ignored `artifacts/` directory.
+## Run on MBD-mini
 
-## Evaluation and limitations
+The real-data workflow uses [MBD-mini](https://huggingface.co/datasets/ai-lab/MBD-mini), a public 10%-client subset of the [Multimodal Banking Dataset](https://arxiv.org/abs/2409.17587). The repository contains code only; downloaded data and generated model artifacts are Git-ignored.
 
-- Folds 0–2 train, fold 3 validates, and fold 4 tests. A client cannot cross these splits;
-  multiple monthly rows from one client stay together. This measures generalization to new
-  clients, **not** a strictly later calendar period.
-- The published targets are extremely imbalanced. ROC-AUC alone is inadequate; inspect
-  per-product average precision and prevalence. Ranking metrics are calculated among
-  clients who actually purchased at least one of the four products.
-- This pipeline uses transaction activity only. Product labels are anonymized, so it does
-  not invent their real names or imply a specific offer strategy.
-- Historical purchase prediction is not treatment-effect estimation. It does not show
-  whether recommending a product would cause uptake, and it is not suitable for deployment
-  without privacy, fairness, calibration, and business-policy review.
-- MBD-mini's reduced client and time coverage is useful for development, but findings need
-  confirmation on the full benchmark before broad claims.
+```cmd
+.venv\Scripts\bankrec-download.exe --data-dir data\raw --workers 8
+.venv\Scripts\bankrec.exe --data-dir data\raw --max-clients 5000 --max-events 32 --epochs 2 --split-strategy time --output-dir artifacts\mbd-time-5000
+```
+
+The downloader verifies SHA-256 digests and extracts only the required transaction, target, and split files. `detail.tar.gz` is roughly 2 GB. MBD-mini is listed as CC BY 4.0; do not republish raw records or use this experimental system for individual decision-making.
+
+## Validation choices
+
+| Strategy | Training | Validation and test | Question answered |
+| --- | --- | --- | --- |
+| `time` (default) | Earlier reporting months | Two latest months | Does the model generalize to a future period? |
+| `client` | Client folds 0–2 | Client folds 3 and 4 | Does it generalize to customers absent from training? |
+
+These designs answer different questions. Time-based validation is emphasized for model selection because a random row split could leak future behavior. The saved report records the exact design used.
+
+## Metrics and interpretation
+
+- **Average precision (AP):** primary classification metric for rare product uptake; read it beside prevalence.
+- **Precision-recall curve:** shows the trade-off between finding more positives and making fewer incorrect selections.
+- **Top-10% lift:** positive rate among the highest-scored 10% divided by the overall positive rate.
+- **Hit@1 / recall@2:** product-ranking metrics calculated only among customer-months with recorded uptake.
+- **Feature importance:** global associations from Random Forest and absolute standardized Logistic Regression coefficients.
+
+Accuracy is intentionally not featured because predicting “no uptake” for nearly everyone can look accurate on an imbalanced dataset while being useless.
+
+## Tests and project structure
+
+```cmd
+.venv\Scripts\python.exe -m pytest -q
+.venv\Scripts\python.exe -m ruff check src tests
+```
+
+```text
+src/bankrec/       data preparation, models, evaluation, CLI, dashboard
+notebooks/         guided end-to-end analysis
+tests/             unit and integration tests
+docs/              recorded experiment results and limitations
+artifacts/         local metrics, predictions, weights, and charts (ignored)
+```
+
+## Responsible-use limitations
+
+- This predicts historical product uptake; it does not estimate whether an offer would cause uptake.
+- The four products and transaction types are anonymized, so no real product strategy is inferred.
+- Propensity outputs are ranking scores, not automatically calibrated probabilities.
+- Synthetic-demo results prove that the workflow runs, not that it performs on a bank population.
+- Production use would require calibration, uncertainty analysis, fairness and privacy review, drift monitoring, secure data controls, and human-approved policy.
+
+See [`docs/results.md`](docs/results.md) for a recorded MBD-mini benchmark and its caveats.
+
+## Resume summary
+
+> Built a leakage-aware banking product propensity pipeline from transaction histories; compared Logistic Regression, Random Forest, and Gradient Boosting with a Hugging Face transaction transformer using chronological validation, average precision, recall@k, and lift, then delivered an interactive Streamlit evaluation dashboard.
 
 ## Source and credit
 
-Mollaev et al., *Multimodal Banking Dataset: Understanding Client Needs through Event
-Sequences*, KDD 2025. The [dataset card](https://huggingface.co/datasets/ai-lab/MBD-mini)
-lists a CC BY 4.0 license. This repository contains code, not redistributed bank records.
+Mollaev et al., *Multimodal Banking Dataset: Understanding Client Needs through Event Sequences*, KDD 2025. The MBD-mini dataset card lists a CC BY 4.0 license.
